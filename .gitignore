@@ -1,0 +1,10 @@
+**/tmp/
+**/__pycache__/
+
+**/.venv/
+poetry.lock
+.vscode/
+
+.DS_Store
+
+.env

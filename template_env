@@ -1,0 +1,3 @@
+DATA_NODES_FILEPATH={absolute/path/to/csv_file.csv}
+
+LOG_LEVEL={DEBUG|INFO|WARNING|ERROR|CRITICAL}
