@@ -69,6 +69,10 @@ Delta Value: 12.38
 
 ### Backlog
 
+* Construction Heuristic: Enumerate to find optimal solution
+* Metaheuristics: GA/SA/TS/ACO/VNS
+* Monitoring/Logging: callback, checkpoints, temination criteria
+* Operators: Two/Three Opt Swap without sequence reverse, path relinking
 * consider a cluster-first-then-route approach: cluster the nodes based on proximity to convert the distance matrix to a sparse matrix
 * distributed population evaluation: distribute computation on multiple compute resources, for example, move distance calculations to GPU cluster
 * identifying dominance based on distance can be accelerated: instead of computing euclidean (4x read operations, 3x multiplications, 1x addition), it can be terminated early if partial computation (2x read op + 1x multiplication) proves sufficient data for dominance
