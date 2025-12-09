@@ -14,9 +14,9 @@ from input_processing.csv_parser import CSVParser
 from input_processing.data_validation import NodeValidator
 from optimiser.initial.naive import NaiveSequencer
 from optimiser.iterative.local_search import LocalSearchImprover
+from report.route_export import RouteExporter
 from schemas.node import Node
 from utils.logger import Logger
-from report.route_export import RouteExporter
 
 load_dotenv()
 
