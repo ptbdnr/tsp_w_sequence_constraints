@@ -44,9 +44,9 @@ class RouteExporter:
 
         route_sequence_ids = "-".join([str(node.id) for node in route.sequence])
         return (
-            f"Route: {route_sequence_ids}\n"
+            f"Route:{route_sequence_ids}\n"
             f"Total Distance: {total_distance:.2f}\n"
-            f"Delta Value :{delta:.2f}"
+            f"Delta Value: {delta:.2f}"
         )
 
     def report_to_file(self, route: Route, filepath: str) -> None:

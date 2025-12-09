@@ -125,3 +125,7 @@ route_exporter.plot_to_file(
     filepath=Path(os.getenv("OUTPUT_DIR"), "naive.png").absolute(),
 )
 logger.info("Route plot saved.")
+route_exporter.report_to_file(
+    route=best_route,
+    filepath=Path(os.getenv("OUTPUT_DIR"), "local_search.txt").absolute(),
+)
