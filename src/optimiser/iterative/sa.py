@@ -1,0 +1,227 @@
+import math
+from random import SystemRandom
+
+from datastore.distance_manager import EuclidianDistanceManager
+from datastore.edge_manager import EdgeManager
+from datastore.node_manager import NodeManager
+from eval.route_eval import RouteEvaluator
+from optimiser.iterative.iterative import IterativeOptimiser
+from optimiser.iterative.operations.operation import Operation
+from optimiser.iterative.operations.relocate import Relocate
+from optimiser.iterative.operations.three_opt_swap import ThreeOptSwap
+from optimiser.iterative.operations.two_opt_swap import TwoOptSwap
+from optimiser.iterative.termination import Termination
+from optimiser.iterative.callback import Callback
+from schemas.route import Route
+from utils.logger import Logger
+
+RANDOM_SEED_VALUE = 42
+
+
+class SimulatedAnnealingImprover(IterativeOptimiser):
+    """Class for simulated annealing optimiser using the SA metaheuristic.
+
+    Simulated annealing is a probabilistic technique that escapes local optima
+    by occasionally accepting worse solutions with a probability that decreases
+    over time (analogous to cooling in metallurgy).
+    """
+
+    node_manager: NodeManager
+    edge_manager: EdgeManager
+    distance_manager: EuclidianDistanceManager
+    callback: Callback
+
+    seed_routes: list[Route]
+    best_routes: list[Route]
+    curr_routes: list[Route]
+
+    operations: list[Operation]
+    termination: Termination
+    route_eval: RouteEvaluator
+
+    # Simulated annealing parameters
+    initial_temperature: float
+    cooling_rate: float
+    min_temperature: float
+    rnd_generator: SystemRandom
+
+    logger: Logger
+
+    def __init__(
+            self,
+            logger: Logger,
+            node_manager: NodeManager,
+            edge_manager: EdgeManager,
+            distance_manager: EuclidianDistanceManager,
+            termination: Termination,
+            callback: Callback,
+            initial_temperature: float = 100.0,
+            cooling_rate: float = 0.95,
+            min_temperature: float = 0.01,
+        ) -> None:
+        """Initialise the simulated annealing optimiser.
+
+        Args:
+            logger: Logger instance for debugging and info messages
+            node_manager: Manager for nodes in the problem
+            edge_manager: Manager for edges and constraints
+            distance_manager: Manager for distance calculations
+            termination: Termination criteria (max iterations/seconds)
+            initial_temperature: Starting temperature for SA (default: 100.0)
+            cooling_rate: Rate at which temperature decreases (default: 0.95)
+            min_temperature: Minimum temperature threshold (default: 0.01)
+
+        """
+        self.logger = logger
+        self.node_manager = node_manager
+        self.edge_manager = edge_manager
+        self.distance_manager = distance_manager
+        self.route_eval = RouteEvaluator(
+            logger=logger,
+            node_manager=self.node_manager,
+            edge_manager=self.edge_manager,
+            distance_manager=distance_manager,
+        )
+        self.seed_routes = []
+        self.best_routes = []
+        self.curr_routes = []
+        self.operations = [
+            TwoOptSwap(route_eval=self.route_eval, logger=logger, rnd_seed=RANDOM_SEED_VALUE),
+            ThreeOptSwap(route_eval=self.route_eval, logger=logger, rnd_seed=RANDOM_SEED_VALUE),
+            Relocate(route_eval=self.route_eval, logger=logger, rnd_seed=RANDOM_SEED_VALUE),
+        ]
+        self.termination = termination
+        self.callback = callback
+        self.initial_temperature = initial_temperature
+        self.cooling_rate = cooling_rate
+        self.min_temperature = min_temperature
+        self.rnd_generator = SystemRandom(x=RANDOM_SEED_VALUE)
+
+    def add_seed_route(self, route: Route) -> None:
+        """Add a seed route for iterative optimisation."""
+        self.seed_routes.append(route)
+
+    def _acceptance_probability(self, current_value: float, new_value: float, temperature: float) -> float:
+        """Calculate the probability of accepting a worse solution.
+
+        Args:
+            current_value: Objective value of current solution
+            new_value: Objective value of new solution
+            temperature: Current temperature
+
+        Returns:
+            Acceptance probability between 0 and 1
+
+        """
+        if new_value < current_value:
+            # Always accept better solutions
+            return 1.0
+
+        # Accept worse solutions with probability based on temperature
+        delta = new_value - current_value
+        return math.exp(-delta / temperature) if temperature > 0 else 0.0
+
+    def optimise(self) -> list[Route]:
+        """Perform simulated annealing optimisation.
+
+        Returns:
+            List containing the best route found
+        """
+        if not self.seed_routes:
+            self.logger.warning("No seed routes available for optimisation.")
+            return [Route(sequence=[])]
+
+        # Initialize with the best seed route
+        self.best_routes = []
+        best_route_value = float("inf")
+        current_route = None
+
+        for route in self.seed_routes:
+            self.logger.debug(f"Seed route with {len(route.sequence)} nodes.")
+            route_value = self.route_eval.calculate_objective_value(route=route)
+            if route_value < best_route_value:
+                best_route_value = route_value
+                self.best_routes = [route.copy()]
+                current_route = route.copy()
+
+        if current_route is None:
+            self.logger.warning("Could not initialize with seed routes.")
+            return [Route(sequence=[])]
+
+        current_value = best_route_value
+        temperature = self.initial_temperature
+        iteration_count = 0
+
+        self.logger.info(
+            f"Starting simulated annealing optimization. "
+            f"Initial temperature: {temperature}, "
+            f"Initial objective value: {current_value:.2f}"
+        )
+
+        while not self.termination.should_terminate(iteration_count=iteration_count):
+            if temperature < self.min_temperature:
+                self.logger.debug(f"Temperature {temperature:.6f} reached minimum, stopping.")
+                break
+
+            # Select a random operation
+            operation = self.operations[iteration_count % len(self.operations)]
+
+            # Generate a neighbor solution
+            new_route = operation.apply_first_improvement(route=current_route)
+
+            # Check validity of the new route
+            if not self.route_eval.is_valid_route(route=new_route):
+                iteration_count += 1
+                continue
+
+            new_value = self.route_eval.calculate_objective_value(route=new_route)
+
+            self.callback.on_iteration(
+                iteration=iteration_count,
+                current_value=new_value,
+                best_value=best_route_value,
+                improved=new_value < current_value,
+            )
+
+            # Accept or reject the new solution
+            acceptance_prob = self._acceptance_probability(current_value, new_value, temperature)
+
+            if self.rnd_generator.random() < acceptance_prob:
+                # Accept the new solution
+                current_route = new_route
+                current_value = new_value
+
+                self.logger.debug(
+                    f"Iteration {iteration_count}: Accepted solution with value {current_value:.2f} "
+                    f"(delta={new_value - best_route_value:.2f}, T={temperature:.6f})",
+                )
+
+                # Update best solution if this is better
+                if current_value < best_route_value:
+                    best_route_value = current_value
+                    self.best_routes = [new_route.copy()]
+                    self.logger.info(
+                        f"New best solution found at iteration {iteration_count}: "
+                        f"value = {best_route_value:.2f}",
+                    )
+                    self.callback.save_route(
+                        iteration=iteration_count,
+                        route=new_route,
+                    )
+            else:
+                self.logger.debug(
+                    f"Iteration {iteration_count}: Rejected solution with value {new_value:.2f} "
+                    f"(prob={acceptance_prob:.4f}, T={temperature:.6f})",
+                )
+
+            # Cool down the temperature
+            temperature *= self.cooling_rate
+            iteration_count += 1
+
+        self.logger.info(
+            f"Simulated annealing completed after {iteration_count} iterations. "
+            f"Best solution value: {best_route_value:.2f}, "
+            f"Final temperature: {temperature:.6f}"
+        )
+
+        return [self.best_routes[0]] if self.best_routes else [Route(sequence=[])]
