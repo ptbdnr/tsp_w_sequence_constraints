@@ -32,6 +32,30 @@ class EdgeManager:
         """Add a Node to the manager."""
         self.nodes[node.id] = node
 
+    def is_edge_valid(self, node_from: Node, node_to: Node) -> bool:
+        """Check if an edge between two nodes is valid."""
+        if self.respect_even_to_odd_travel_constraint:
+            n = len(self.nodes)
+            # traveling form node $𝑖 ∈ 𝑁  \ {0, 𝑛 + 1}$ to node $𝑗 ∈ 𝑁 \ {0, 𝑛 + 1}$ is forbidden
+            # when: (i) $𝑖$ is an even number, (ii) $𝑗$ is an odd number, and (iii) $𝑖 < 𝑛/2$, and
+            if (
+                int(node_from.id) % 2 == 0 and
+                int(node_to.id) % 2 == 1 and
+                int(node_from.id) < n / 2
+            ):
+                return False
+        if self.respect_odd_to_even_travel_constraint:
+            n = len(self.nodes)
+            # * traveling form node $𝑖 ∈ 𝑁 \ {0, 𝑛 + 1}$ to node $𝑗 ∈ 𝑁 \ {0, 𝑛 + 1}$ is forbidden
+            # when: (i) $𝑖$ is an odd number, (ii) $𝑗$ is an even number, and (iii) $𝑖 ≥ 𝑛/2$
+            if (
+                int(node_from.id) % 2 == 1 and
+                int(node_to.id) % 2 == 0 and
+                int(node_from.id) >= n / 2
+            ):
+                return False
+        return True
+
     def neighbors(
             self,
             node_id: str,
@@ -58,30 +82,7 @@ class EdgeManager:
             self.logger.info(f"No candidate nodes identified for neighbors of node ID {node_id}.")
             return []
 
-        n = len(self.nodes)
-
-        if self.respect_even_to_odd_travel_constraint:
-            # traveling form node $𝑖 ∈ 𝑁  \ {0, 𝑛 + 1}$ to node $𝑗 ∈ 𝑁 \ {0, 𝑛 + 1}$ is forbidden
-            # when: (i) $𝑖$ is an even number, (ii) $𝑗$ is an odd number, and (iii) $𝑖 < 𝑛/2$, and
-            candidates = [
-                node for node in candidates
-                if not (
-                    int(node_id) % 2 == 0 and
-                    int(node.id) % 2 == 1 and
-                    int(node_id) < n / 2
-                )
-            ]
-        if self.respect_odd_to_even_travel_constraint:
-            # * traveling form node $𝑖 ∈ 𝑁 \ {0, 𝑛 + 1}$ to node $𝑗 ∈ 𝑁 \ {0, 𝑛 + 1}$ is forbidden
-            # when: (i) $𝑖$ is an odd number, (ii) $𝑗$ is an even number, and (iii) $𝑖 ≥ 𝑛/2$
-            candidates = [
-                node for node in candidates
-                if not (
-                    int(node_id) % 2 == 1 and
-                    int(node.id) % 2 == 0 and
-                    int(node_id) >= n / 2
-                )
-            ]
+        candidates = [n for n in candidates if self.is_edge_valid(self.nodes[node_id], n)]
 
         if sort_by_distance:
             distance_manager = distance_manager or EuclidianDistanceManager(logger=self.logger)
