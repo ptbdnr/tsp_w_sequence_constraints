@@ -71,17 +71,18 @@ class LocalSearchImprover:
             return Route(sequence=[])
 
         # Naive iterative improvement: return the best seed route
-        best_routes = []
-        best_route_value = float("inf")
+        best_seed_routes = []
+        best_seed_route_value = float("inf")
         for route in self.seed_routes:
             self.logger.debug(f"Seed route with {len(route.sequence)} nodes.")
             route_value = self.route_eval.calculate_objective_value(route=route)
-            if route_value < best_route_value:
-                best_route_value = route_value
-                best_routes = [route]
+            if route_value < best_seed_route_value:
+                best_seed_route_value = route_value
+                best_seed_routes = [route]
 
         iteration_count = 0
-        for route in best_routes:
+        for seed_route in best_seed_routes:
+            route = seed_route.copy()
             route_value = self.route_eval.calculate_objective_value(route=route)
             while not self.termination.should_terminate(iteration_count=iteration_count):
                 operation = self.operations[iteration_count % len(self.operations)]
@@ -93,13 +94,13 @@ class LocalSearchImprover:
                     best_value=route_value,
                     improved=new_route_value < route_value,
                 )
-                if new_route_value < route_value:
+                if new_route_value <= route_value:  # Accept both improvements and equal solutions
                     self.logger.debug(
                         f"Improved route found with objective value {new_route_value} "
                         f"using operation {operation.__class__.__name__}.",
                     )
                     route_value = new_route_value
-                    best_routes = [new_route]
+                    route = new_route
                     self.callback.save_route(
                         iteration=iteration_count,
                         route=new_route,
@@ -107,4 +108,4 @@ class LocalSearchImprover:
                 iteration_count += 1
 
         self.logger.debug(f"Selected best route with value: {route_value}.")
-        return [best_routes[0]]
+        return [route]
