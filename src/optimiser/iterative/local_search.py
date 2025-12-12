@@ -88,13 +88,8 @@ class LocalSearchImprover:
                 operation = self.operations[iteration_count % len(self.operations)]
                 new_route = operation.apply_first_improvement(route=route)
                 new_route_value = self.route_eval.calculate_objective_value(route=new_route)
-                self.callback.on_iteration(
-                    iteration=iteration_count,
-                    current_value=new_route_value,
-                    best_value=route_value,
-                    improved=new_route_value < route_value,
-                )
-                if new_route_value < route_value:
+                improved = new_route_value < route_value
+                if improved:
                     self.logger.debug(
                         f"Improved route found with objective value {new_route_value} "
                         f"using operation {operation.__class__.__name__}.",
@@ -105,6 +100,12 @@ class LocalSearchImprover:
                         iteration=iteration_count,
                         route=new_route,
                     )
+                self.callback.on_iteration(
+                    iteration=iteration_count,
+                    current_value=new_route_value,
+                    best_value=route_value,
+                    improved=improved,
+                )
                 iteration_count += 1
 
         self.logger.debug(f"Selected best route with value: {route_value}.")
