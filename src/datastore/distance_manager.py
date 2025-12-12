@@ -6,15 +6,18 @@ class EuclidianDistanceManager:
     """A manager for calculating Euclidian distances between nodes."""
 
     logger: Logger
-    distances: dict[tuple[str, str], float] = {}
+    distances: dict[tuple[int, int], float]
 
     def __init__(
             self,
+            nb_of_nodes: int,
             logger: Logger | None = None,
         ) -> None:
         """Initialize the distance manager."""
         self.logger = logger or Logger(__name__)
-        self.distances = {}
+        self.distances = {
+            (nb_of_nodes - 1, 0): 0.0,  # distance from last node to depot is zero
+        }
 
     def get_distance(
             self,
