@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from eval.route_eval import RouteEvaluator
-from report.plot_builder import PlotBuilder
+from report.plot_builder import RoutePlotBuilder
 from schemas.node import Node
 from schemas.route import Route
 from utils.logger import Logger
@@ -12,7 +12,7 @@ class RouteExporter:
 
     logger: Logger
     route_eval: RouteEvaluator
-    plot_builder: PlotBuilder
+    plot_plot_builder: RoutePlotBuilder
 
     def __init__(
             self,
@@ -23,7 +23,7 @@ class RouteExporter:
         """Initialize class."""
         self.logger = logger or Logger(__name__)
         self.route_eval = route_eval
-        self.plot_builder = PlotBuilder(
+        self.plot_plot_builder = RoutePlotBuilder(
             nodes=nodes,
             logger=self.logger,
         )
@@ -55,13 +55,13 @@ class RouteExporter:
         with Path(filepath).open("w", encoding="UTF8") as file:
             file.write(content)
 
-    def plot_to_file(
+    def plot_route(
             self,
             route: Route,
             filepath: str,
             title: str | None = None,
         ) -> None:
-        return self.plot_builder.route_to_file(
+        return self.plot_plot_builder.route_to_file(
             route=route,
             filepath=filepath,
             title=title,

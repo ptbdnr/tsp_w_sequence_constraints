@@ -13,7 +13,11 @@ from eval.route_eval import RouteEvaluator
 from input_processing.csv_parser import CSVParser
 from input_processing.data_validation import NodeValidator
 from optimiser.initial.naive import NaiveSequencer
+from optimiser.iterative.alns_wrapper import ALNSWrapper
+from optimiser.iterative.callback import Callback
 from optimiser.iterative.local_search import LocalSearchImprover
+from optimiser.iterative.sa import SimulatedAnnealingImprover
+from optimiser.iterative.termination import Termination
 from report.route_export import RouteExporter
 from schemas.node import Node
 from utils.logger import Logger
@@ -34,6 +38,8 @@ nodes: list[Node] = CSVParser(logger=logger).parse(
 )
 logger.info(f"Parsed {len(nodes)} nodes from CSV file.")
 
+Path(os.getenv("OUTPUT_DIR")).mkdir(parents=True, exist_ok=True)
+
 # ==================
 # PRECOMPUTE DATA
 
@@ -47,7 +53,10 @@ for node in nodes:
         edge_mngr.add_node(node)
 
 logger.level = "INFO"
-distance_mngr = EuclidianDistanceManager(logger=logger)
+distance_mngr = EuclidianDistanceManager(
+    nb_of_nodes=len(nodes),
+    logger=logger,
+)
 
 # ==================
 # COMPUTE LOWER AND UPPER BOUNDS
@@ -66,6 +75,10 @@ lb = lb_calculator.calculate_lower_bound(
     distance_manager=distance_mngr,
 )
 logger.info(f"Lower bound: {lb}")
+
+with Path(os.getenv("OUTPUT_DIR"), "bounds.txt").open("w", encoding="utf-8") as f:
+    f.write(f"Upper bound: {ub}\n")
+    f.write(f"Lower bound: {lb}\n")
 
 # ==================
 # EVALUATOR AND EXPORTERS
@@ -96,36 +109,156 @@ if not route_eval.is_valid_route(route=naive_route):
     logger.error("The route is invalid.")
 else:
     print(route_exporter.report_format(route=naive_route))
-route_exporter.plot_to_file(
+title = "NaiveSequencer"
+route_exporter.plot_route(
     route=naive_route,
-    title="NaiveSequencer",
-    filepath=Path(os.getenv("OUTPUT_DIR"), "naive.png").absolute(),
+    title=title,
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}.png").absolute(),
 )
 logger.info("Route plot saved.")
+route_exporter.report_to_file(
+    route=naive_route,
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}.txt").absolute(),
+)
 
 # ==================
 # OPTIMISATION: ITERATIVE IMPROVEMENT
 
-local_search_improver = LocalSearchImprover(
-    logger=logger,
-    node_manager=node_mngr,
+termination = Termination(
+    max_iterations=int(os.getenv("TERMINATION_MAX_ITERATIONS")),
+    max_seconds=float(os.getenv("TERMINATION_MAX_SECONDS")),
+)
+
+# ==================
+# OPTIMISATION: ITERATIVE IMPROVEMENT: ALNS
+
+alns_wrapper = ALNSWrapper(
     edge_manager=edge_mngr,
     distance_manager=distance_mngr,
+    route_evaluator=route_eval,
+    termination=termination,
+    logger=logger,
 )
-local_search_improver.add_seed_route(route=naive_route)
-best_route = local_search_improver.optimise()
+alns_wrapper.add_seed_route(route=naive_route)
+best_routes = alns_wrapper.optimise()
+callback = Callback()
+callback.load_alns_result_statistics(
+    statistics=alns_wrapper.result.statistics,
+)
+best_route = best_routes[0]
 logger.info(f"Best found route: {best_route}")
 if not route_eval.is_valid_route(route=best_route):
     logger.error("The route is invalid.")
 else:
     print(route_exporter.report_format(route=best_route))
-route_exporter.plot_to_file(
+title = "ALNSWrapper"
+route_exporter.plot_route(
     route=best_route,
-    title="LocalSearchImprover",
-    filepath=Path(os.getenv("OUTPUT_DIR"), "naive.png").absolute(),
+    title=title,
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}.png").absolute(),
 )
 logger.info("Route plot saved.")
 route_exporter.report_to_file(
     route=best_route,
-    filepath=Path(os.getenv("OUTPUT_DIR"), "local_search.txt").absolute(),
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}.txt").absolute(),
+)
+alns_wrapper.plot_result(
+    title=title,
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}_iter_default.png").absolute(),
+)
+callback.iterations_to_file(
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}_iter.json").absolute(),
+)
+callback.plot_iterations(
+    title=title,
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}_iter.png").absolute(),
+)
+
+# ==================
+# OPTIMISATION: ITERATIVE IMPROVEMENT: LOCAL SEARCH
+
+termination.reset()
+callback = Callback()
+improver = LocalSearchImprover(
+    logger=logger,
+    node_manager=node_mngr,
+    edge_manager=edge_mngr,
+    distance_manager=distance_mngr,
+    termination=termination,
+    callback=callback,
+)
+improver.add_seed_route(route=naive_route)
+best_routes = improver.optimise()
+best_route = best_routes[0]
+logger.info(f"Best found route: {best_route}")
+if not route_eval.is_valid_route(route=best_route):
+    logger.error("The route is invalid.")
+else:
+    print(route_exporter.report_format(route=best_route))
+title = "LocalSearchImprover"
+route_exporter.plot_route(
+    route=best_route,
+    title=title,
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}.png").absolute(),
+)
+logger.info("Route plot saved.")
+route_exporter.report_to_file(
+    route=best_route,
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}.txt").absolute(),
+)
+callback.routes_to_file(
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}_routes.json").absolute(),
+)
+callback.iterations_to_file(
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}_iter.json").absolute(),
+)
+callback.plot_iterations(
+    title=title,
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}_iter.png").absolute(),
+)
+
+# ==================
+# OPTIMISATION: ITERATIVE IMPROVEMENT: SIMULATED ANNEALING
+
+termination.reset()
+callback = Callback()
+improver = SimulatedAnnealingImprover(
+    logger=logger,
+    node_manager=node_mngr,
+    edge_manager=edge_mngr,
+    distance_manager=distance_mngr,
+    termination=termination,
+    initial_temperature=1000.0,
+    cooling_rate=0.95,
+    min_temperature=0.01,
+    callback=callback,
+)
+improver.add_seed_route(route=naive_route)
+best_routes = improver.optimise()
+best_route = best_routes[0]
+logger.info(f"Best found route: {best_route}")
+if not route_eval.is_valid_route(route=best_route):
+    logger.error("The route is invalid.")
+else:
+    print(route_exporter.report_format(route=best_route))
+title = "SimulatedAnnealingImprover"
+route_exporter.plot_route(
+    route=best_route,
+    title=title,
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}.png").absolute(),
+)
+logger.info("Route plot saved.")
+route_exporter.report_to_file(
+    route=best_route,
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}.txt").absolute(),
+)
+callback.routes_to_file(
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}_routes.json").absolute(),
+)
+callback.iterations_to_file(
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}_iter.json").absolute(),
+)
+callback.plot_iterations(
+    title=title,
+    filepath=Path(os.getenv("OUTPUT_DIR"), f"{title}_iter.png").absolute(),
 )
