@@ -1,0 +1,170 @@
+specification {
+  deploymentNode environment
+  deploymentNode zone
+  deploymentNode vm {
+    notation 'Virtual Machine'
+    technology 'VMware'
+  }
+
+  element actor {
+    style { 
+        shape person
+    }
+  }
+  element component
+
+  relationship sync {
+    color green
+    line dashed
+    head vee
+    tail diamond
+  }
+  relationship async {
+    color amber
+    line dotted
+    head vee
+  }
+
+  tag todo {
+    color #808080
+  }
+}
+
+model {
+    user = actor 'User' {
+        description '
+            A user who interacts with the system 
+            to solve routing problems.
+        '
+    }
+
+    iterface = component 'User Interface' {
+        #todo
+        
+        style { 
+          shape browser
+          icon tech:react
+        }
+
+        user -> this 'Access Interface' {
+            technology 'CLI'
+        }
+    }
+
+    data = component 'Data Store' {
+        style { shape storage }
+        component nodes { style { multiple true } }
+        component edges { style { multiple true } }
+        component distances { style { multiple true } }
+    }
+
+    bounds = component 'Bound Estimation' {        
+        component lower_bound 'Lower Bound'
+        component upper_bound 'Upper Bound'
+        // Relationships
+        this -[sync]-> data
+        user -> this 'Request Bounds' {
+            technology 'Synchronous Call'
+        }
+    }
+    
+
+    evaluation = component 'Evaluator'
+    visualization = component 'Monitoring & Reporting'   
+    
+    // Heuristic Approaches
+    constructive = component 'Constructive Heuristic' {
+        // Relationships
+        this -[sync]-> data
+        this -[sync]-> evaluation
+        this -[async]-> visualization
+        user -> this 'Construct a Heuristic Solution' {
+            technology 'Synchronous Call'
+        }
+    }
+    
+
+    // Metaheuristic Approaches
+    iterative = component 'Iterative Metaheuristic' {
+        component metaheuristic 'Metaheuristic Methods' {
+            component LS 'Local Search'
+            component SA 'Simulated Annealing'
+            component ALNS 'Adaptive Large Neighborhood Search'
+            user -> LS 'Run Local Search'
+            user -> SA 'Run Simulated Annealing'
+            user -> ALNS 'Run ALNS'
+        }
+        component neighborhoods 'Neighborhood Structures' {
+            component swap
+            component relocate
+            component two_opt
+        }
+        // Relationships
+        user -> this 'Run Metaheuristic Methods'
+        this -[sync]-> data
+        this -[sync]-> evaluation
+        this -[async]-> visualization
+        
+    }
+    
+}
+
+deployment {
+  environment prod {
+    zone region 'mars' {
+      vm vmui1 {
+        webapp = instanceOf iterface 'Primary Interface'
+      }
+      vm vmdb1 {
+        db = instanceOf data 'Primary Data Store'
+      }
+      vm vmdb2{
+        db = instanceOf data 'Secondary Data Store'
+      }
+      vmdb1 -[async]-> vmdb2 'Database Replication' {
+        technology 'Asynchronous Call'
+      }
+    }
+  }
+}
+
+views 'hld' {
+
+  view index {
+    title 'Overall High-Level Design'
+    include *
+  }
+
+  view index2 extends index {
+    title 'High-Level Design w. Details'
+    include metaheuristic.*
+    include data.*
+  	autoLayout LeftRight
+  }
+
+  view of metaheuristic {
+    title 'Metaheuristic Details'
+    include *
+    
+    style user {
+      color muted
+    }
+
+    autoLayout LeftRight
+    rank source { user }
+  }
+}
+
+views 'other' {
+  view todo {
+    title 'To-Do Items'
+    include * where tag = #todo
+  }
+}
+
+views 'deployment' {
+  deployment view prod {
+    include prod.**
+    include prod.region.vmui1.webapp
+  }
+}
